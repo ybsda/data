@@ -1,0 +1,65 @@
+services:
+  # --- SOURCES DE DONNÉES ---
+  db-postgres:
+    image: debezium/postgres:15
+    environment: [POSTGRES_USER=admin, POSTGRES_PASSWORD=admin, POSTGRES_DB=customer_db]
+    volumes: ["./postgres_data:/docker-entrypoint-initdb.d"]
+    ports: ["5432:5432"]
+
+  db-mysql-sales:
+    image: debezium/example-mysql:2.3
+    environment: [MYSQL_ROOT_PASSWORD=admin, MYSQL_USER=user1, MYSQL_PASSWORD=pass1, MYSQL_DATABASE=sales_db]
+    volumes: ["./mysql1_data:/docker-entrypoint-initdb.d"]
+    ports: ["3306:3306"]
+
+  db-mysql-hr:
+    image: debezium/example-mysql:2.3
+    environment: [MYSQL_ROOT_PASSWORD=admin, MYSQL_USER=user2, MYSQL_PASSWORD=pass2, MYSQL_DATABASE=hr_db]
+    volumes: ["./mysql2_data:/docker-entrypoint-initdb.d"]
+    ports: ["3307:3306"]
+
+  # --- LE CŒUR : KAFKA & DEBEZIUM ---
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+  debezium-connect:
+    image: debezium/connect:2.3
+    ports: ["8083:8083"]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+    depends_on: [kafka]
+
+  # --- LE STOCKAGE (LAKEHOUSE) ---
+  minio:
+    image: minio/minio
+    ports: ["9000:9000", "9001:9001"]
+    environment: [MINIO_ROOT_USER=admin, MINIO_ROOT_PASSWORD=password]
+    command: server /data --console-address ":9001"
+
+  # --- LE TRAITEMENT (SPARK & TRINO) ---
+  spark-iceberg:
+    image: tabulario/spark-iceberg
+    ports: ["8888:8888", "8080:8080"]
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+    depends_on: [minio]
+
+  trino:
+    image: trinodb/trino
+    ports: ["8081:8080"]

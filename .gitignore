@@ -1,0 +1,23 @@
+# Docker volumes / Data paths
+postgres_data/
+mysql1_data/
+mysql2_data/
+
+# Spark / Java
+jars/
+*.jar
+*.class
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.virtual_documents/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
